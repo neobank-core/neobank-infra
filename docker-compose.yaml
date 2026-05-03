@@ -80,9 +80,9 @@ services:
 
 #  user-service:
 #    build:
-#      context: ../user-service
+#      context: ../ms-user-service
 #
-#    container_name: user-service
+#    container_name: ms-user-service
 #
 #    ports:
 #      - "8081:8081"

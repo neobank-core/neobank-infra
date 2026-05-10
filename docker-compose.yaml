@@ -56,6 +56,20 @@ services:
     networks:
       - neobank-network
 
+  card-postgres:
+    image: postgres:16
+    container_name: card-postgres
+    volumes:
+      - card_pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: neobank_cards
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5436:5432"
+    networks:
+      - neobank-network
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.0
     container_name: keycloak
@@ -145,6 +159,7 @@ volumes:
   user_pgdata:
   account_pgdata:
   transaction_pgdata:
+  card_pgdata:
 
 networks:
   neobank-network:

@@ -1,0 +1,148 @@
+### Сценарий: Полный цикл перевода денег в NeoBank
+
+### 1. Регистрируем первого пользователя
+# При успешной регистрации: создается юзер в Keycloak, сохраняется в БД, улетает событие в Kafka, и account-service автоматом открывает счет.
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "user_{{$uuid}}",
+  "email": "user_{{$uuid}}@neobank.com",
+  "password": "password123",
+  "firstName": "Alice",
+  "lastName": "Smith",
+  "phone": "+123456789"
+}
+
+> {% client.global.set("username1", response.body.username); %}
+
+### 2. Авторизуемся под первым пользователем (Получаем токен)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username1}}",
+  "password": "password123"
+}
+
+> {% client.global.set("token1", response.body.accessToken); %}
+
+### 3. Получаем список счетов для Юзера 1
+# Теперь счет точно есть, потому что мы прошли полный путь через Kafka!
+GET http://localhost:8080/api/accounts/my
+Authorization: Bearer {{token1}}
+
+> {% client.global.set("account1", response.body[0].id); %}
+
+### 4. Пополняем баланс Юзера 1 на 5000 USD (Deposit)
+POST http://localhost:8080/api/transactions/deposit
+Authorization: Bearer {{token1}}
+Content-Type: application/json
+
+{
+  "amount": 5000.00,
+  "currency": "AZN"
+}
+
+### 5. Выпускаем карту для Юзера 1 (привязанную к его счету)
+POST http://localhost:8080/api/cards
+Authorization: Bearer {{token1}}
+Content-Type: application/json
+
+{
+  "accountId": "{{account1}}",
+  "cardHolderName": "Alice Smith",
+  "cardType": "DEBIT"
+}
+
+> {% 
+    client.global.set("card1", response.body.cardId);
+    client.global.set("session1", response.body.sessionToken);
+%}
+
+### 5.1. Активируем карту Юзера 1 (Подтверждаем 3DS)
+POST http://localhost:8080/api/cards/{{card1}}/verify-3ds
+Authorization: Bearer {{token1}}
+Content-Type: application/json
+
+{
+  "sessionToken": "{{session1}}",
+  "otp": "123456"
+}
+
+### =======================================================
+### 6. Регистрируем второго пользователя
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "admin_{{$uuid}}",
+  "email": "admin_{{$uuid}}@neobank.com",
+  "password": "password123",
+  "firstName": "Bob",
+  "lastName": "Johnson",
+  "phone": "+987654321"
+}
+
+> {% client.global.set("username2", response.body.username); %}
+
+### 7. Авторизуемся под вторым пользователем
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username2}}",
+  "password": "password123"
+}
+
+> {% client.global.set("token2", response.body.accessToken); %}
+
+### 8. Получаем список счетов для Юзера 2
+GET http://localhost:8080/api/accounts/my
+Authorization: Bearer {{token2}}
+
+> {% client.global.set("account2", response.body[0].id); %}
+
+### 9. Выпускаем карту для Юзера 2
+POST http://localhost:8080/api/cards
+Authorization: Bearer {{token2}}
+Content-Type: application/json
+
+{
+  "accountId": "{{account2}}",
+  "cardHolderName": "Bob Johnson",
+  "cardType": "DEBIT"
+}
+
+> {% 
+    client.global.set("card2", response.body.cardId);
+    client.global.set("session2", response.body.sessionToken);
+%}
+
+### 9.1. Активируем карту Юзера 2 (Подтверждаем 3DS)
+POST http://localhost:8080/api/cards/{{card2}}/verify-3ds
+Authorization: Bearer {{token2}}
+Content-Type: application/json
+
+{
+  "sessionToken": "{{session2}}",
+  "otp": "123456"
+}
+
+### =======================================================
+### 10. МАГИЯ: Делаем перевод от Юзера 1 к Юзеру 2
+POST http://localhost:8080/api/transactions/transfer
+Authorization: Bearer {{token1}}
+Content-Type: application/json
+X-Idempotency-Key: {{$uuid}}
+
+{
+  "senderCardId": "{{card1}}",
+  "receiverCardId": "{{card2}}",
+  "amount": 150.00,
+  "currency": "AZN"
+}
+
+### 11. Проверяем баланс счета Юзера 2 (должно стать +150 USD)
+GET http://localhost:8080/api/accounts/{{account2}}/balance
+Authorization: Bearer {{token2}}

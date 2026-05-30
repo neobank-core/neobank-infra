@@ -70,6 +70,20 @@ services:
     networks:
       - neobank-network
 
+  notification-postgres:
+    image: postgres:16
+    container_name: notification-postgres
+    volumes:
+      - notification_pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: neobank_notifications
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5437:5432"
+    networks:
+      - neobank-network
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.0
     container_name: keycloak
@@ -160,6 +174,7 @@ volumes:
   account_pgdata:
   transaction_pgdata:
   card_pgdata:
+  notification_pgdata:
 
 networks:
   neobank-network:

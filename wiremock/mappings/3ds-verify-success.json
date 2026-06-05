@@ -1,0 +1,17 @@
+{
+  "name": "3DS Verify - Success",
+  "request": {
+    "method": "POST",
+    "url": "/mock/3ds/verify",
+    "bodyPatterns": [
+      { "equalToJson": "{\"otp\": \"123456\"}", "ignoreExtraElements": true }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": { "verified": true }
+  }
+}

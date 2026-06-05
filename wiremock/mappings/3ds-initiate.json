@@ -1,0 +1,19 @@
+{
+  "name": "3DS Initiate",
+  "request": {
+    "method": "POST",
+    "url": "/mock/3ds/initiate"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "sessionToken": "{{randomValue type='UUID'}}",
+      "mockOtp": "123456",
+      "message": "OTP sent to mock phone number"
+    },
+    "transformers": ["response-template"]
+  }
+}

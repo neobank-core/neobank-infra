@@ -87,7 +87,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.0
     container_name: keycloak
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
@@ -98,6 +98,8 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
       - "8090:8090"
+    volumes:
+      - ./keycloak/neobank-realm.json:/opt/keycloak/data/import/neobank-realm.json:ro
     networks:
       - neobank-network
     depends_on:
@@ -173,6 +175,43 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+    networks:
+      - neobank-network
+
+  wiremock:
+    image: wiremock/wiremock:3.6.0
+    container_name: wiremock
+    ports:
+      - "9999:8080"
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings
+    networks:
+      - neobank-network
+
+  unleash-db:
+    image: postgres:16
+    container_name: unleash-db
+    environment:
+      POSTGRES_DB: unleash
+      POSTGRES_USER: unleash
+      POSTGRES_PASSWORD: unleash_secret
+    networks:
+      - neobank-network
+
+  unleash:
+    image: unleashorg/unleash-server:5
+    container_name: unleash
+    ports:
+      - "4242:4242"
+    environment:
+      DATABASE_HOST: unleash-db
+      DATABASE_NAME: unleash
+      DATABASE_USERNAME: unleash
+      DATABASE_PASSWORD: unleash_secret
+      DATABASE_SSL: "false"
+      INIT_ADMIN_API_TOKENS: "*:*.unleash-insecure-api-token"
+    depends_on:
+      - unleash-db
     networks:
       - neobank-network
 

@@ -1,0 +1,14 @@
+{
+  "name": "3DS Verify - Failure",
+  "request": {
+    "method": "POST",
+    "url": "/mock/3ds/verify"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": { "verified": false, "reason": "Invalid OTP" }
+  }
+}

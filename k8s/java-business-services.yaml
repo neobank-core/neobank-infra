@@ -1,0 +1,758 @@
+# --- CONFIG SERVER ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+  labels:
+    app: config-server
+spec:
+  ports:
+    - port: 8888
+      targetPort: 8888
+  selector:
+    app: config-server
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+    spec:
+      containers:
+      - name: config-server
+        image: neobank/config-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8888
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8888
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "native"
+        - name: SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS
+          value: "file:///config-repo"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config-repo
+      volumes:
+      - name: config-volume
+        configMap:
+          name: neobank-config-files
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+spec:
+  selector:
+    app: config-server
+  ports:
+    - protocol: TCP
+      port: 8888
+      targetPort: 8888
+
+# --- USER SERVICE ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  labels:
+    app: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: neobank/ms-user-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8081
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://user-postgres:5432/neobank_users"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+        - name: KEYCLOAK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: keycloak-client-secret
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  selector:
+    app: user-service
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+
+---
+# --- DISCOVERY SERVER (EUREKA) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discovery-server
+  labels:
+    app: discovery-server
+spec:
+  ports:
+    - port: 8761
+      targetPort: 8761
+  selector:
+    app: discovery-server
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discovery-server
+  template:
+    metadata:
+      labels:
+        app: discovery-server
+    spec:
+      containers:
+      - name: discovery-server
+        image: neobank/ms-discovery-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8761
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8761
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8761
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- API GATEWAY ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app: api-gateway
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: api-gateway
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: neobank/ms-api-gateway:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- ACCOUNT SERVICE ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  labels:
+    app: account-service
+spec:
+  ports:
+    - port: 8082
+      targetPort: 8082
+  selector:
+    app: account-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-service
+  template:
+    metadata:
+      labels:
+        app: account-service
+    spec:
+      containers:
+      - name: account-service
+        image: neobank/ms-account-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8082
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://account-postgres:5433/neobank_accounts"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: IO_GETUNLEASH_API_URL
+          value: "http://unleash:4242/api"
+        - name: IO_GETUNLEASH_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-api-token
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- CARD SERVICE ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: card-service
+  labels:
+    app: card-service
+spec:
+  ports:
+    - port: 8083
+      targetPort: 8083
+  selector:
+    app: card-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: card-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: card-service
+  template:
+    metadata:
+      labels:
+        app: card-service
+    spec:
+      containers:
+      - name: card-service
+        image: neobank/ms-card-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8083
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8083
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8083
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://card-postgres:5434/neobank_cards"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: IO_GETUNLEASH_API_URL
+          value: "http://unleash:4242/api"
+        - name: IO_GETUNLEASH_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-api-token
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- TRANSACTION SERVICE ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-service
+  labels:
+    app: transaction-service
+spec:
+  ports:
+    - port: 8084
+      targetPort: 8084
+  selector:
+    app: transaction-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transaction-service
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+    spec:
+      containers:
+      - name: transaction-service
+        image: neobank/ms-transaction-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8084
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8084
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8084
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://transaction-postgres:5435/neobank_transactions"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: IO_GETUNLEASH_API_URL
+          value: "http://unleash:4242/api"
+        - name: IO_GETUNLEASH_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-api-token
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- ADMIN SERVICE ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+  labels:
+    app: admin-service
+spec:
+  ports:
+    - port: 8086
+      targetPort: 8086
+  selector:
+    app: admin-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-service
+  template:
+    metadata:
+      labels:
+        app: admin-service
+    spec:
+      containers:
+      - name: admin-service
+        image: neobank/ms-admin-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8086
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8086
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8086
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_CLOUD_OPENFEIGN_CIRCUITBREAKER_ENABLED
+          value: "false"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://account-postgres:5433/neobank_accounts"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+# --- NOTIFICATION SERVICE ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  ports:
+    - port: 8087
+      targetPort: 8087
+  selector:
+    app: notification-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: neobank/ms-notification-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8087
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8087
+          initialDelaySeconds: 360
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8087
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "docker"
+        - name: WIREMOCK_URL
+          value: "http://wiremock:8080"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis"
+        - name: NEOBANK_INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: internal-api-key
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://notification-postgres:5436/neobank_notifications"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        - name: EUREKA_INSTANCE_PREFERIPADDRESS
+          value: "true"
+      - name: logstash-proxy
+        image: alpine/socat:latest
+        args: ["tcp-listen:5000,fork,reuseaddr", "tcp:logstash:5000"]
+
+
+
+

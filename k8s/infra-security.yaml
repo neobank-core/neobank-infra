@@ -1,0 +1,65 @@
+# --- KEYCLOAK ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  ports:
+    - port: 8090
+      targetPort: 8090
+  selector:
+    app: keycloak
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:25.0.0
+        args: ["start-dev", "--import-realm"]
+        ports:
+        - containerPort: 8090
+        env:
+        - name: KC_DB
+          value: "postgres"
+        - name: KC_DB_URL
+          value: "jdbc:postgresql://keycloak-db:5432/keycloak"
+        - name: KC_DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: keycloak-user
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: keycloak-password
+        - name: KC_HTTP_PORT
+          value: "8090"
+        - name: KEYCLOAK_ADMIN
+          value: "admin"
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          value: "admin"
+        volumeMounts:
+        - name: realm-config
+          mountPath: /opt/keycloak/data/import/neobank-realm.json
+          subPath: neobank-realm.json
+      volumes:
+      - name: realm-config
+        configMap:
+          name: keycloak-realm-config

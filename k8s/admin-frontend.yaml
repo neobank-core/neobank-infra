@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-frontend
+  labels:
+    app: admin-frontend
+spec:
+  ports:
+    - port: 3001
+      targetPort: 3001
+  selector:
+    app: admin-frontend
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-frontend
+  template:
+    metadata:
+      labels:
+        app: admin-frontend
+    spec:
+      containers:
+      - name: admin-frontend
+        image: neobank/admin-frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://api.neobank.local"

@@ -1,0 +1,465 @@
+# --- USER POSTGRES ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-postgres
+  labels:
+    app: user-postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: user-postgres
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: user-postgres
+spec:
+  serviceName: "user-postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-postgres
+  template:
+    metadata:
+      labels:
+        app: user-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "neobank_users"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+---
+# --- ACCOUNT POSTGRES ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-postgres
+  labels:
+    app: account-postgres
+spec:
+  ports:
+    - port: 5433
+      targetPort: 5432
+  selector:
+    app: account-postgres
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: account-postgres
+spec:
+  serviceName: "account-postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-postgres
+  template:
+    metadata:
+      labels:
+        app: account-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "neobank_accounts"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        volumeMounts:
+        - name: account-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: account-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+# --- CARD POSTGRES ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: card-postgres
+spec:
+  ports:
+    - port: 5434
+      targetPort: 5432
+  selector:
+    app: card-postgres
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: card-postgres
+spec:
+  serviceName: "card-postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: card-postgres
+  template:
+    metadata:
+      labels:
+        app: card-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        env:
+        - name: POSTGRES_DB
+          value: "neobank_cards"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        volumeMounts:
+        - name: card-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: card-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+# --- TRANSACTION POSTGRES ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-postgres
+spec:
+  ports:
+    - port: 5435
+      targetPort: 5432
+  selector:
+    app: transaction-postgres
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: transaction-postgres
+spec:
+  serviceName: "transaction-postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transaction-postgres
+  template:
+    metadata:
+      labels:
+        app: transaction-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        env:
+        - name: POSTGRES_DB
+          value: "neobank_transactions"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        volumeMounts:
+        - name: transaction-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: transaction-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+# --- NOTIFICATION POSTGRES ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-postgres
+spec:
+  ports:
+    - port: 5436
+      targetPort: 5432
+  selector:
+    app: notification-postgres
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: notification-postgres
+spec:
+  serviceName: "notification-postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-postgres
+  template:
+    metadata:
+      labels:
+        app: notification-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        env:
+        - name: POSTGRES_DB
+          value: "neobank_notifications"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: postgres-password
+        volumeMounts:
+        - name: notification-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: notification-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+# --- KEYCLOAK POSTGRES ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: keycloak-db
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak-db
+spec:
+  serviceName: "keycloak-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak-db
+  template:
+    metadata:
+      labels:
+        app: keycloak-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        env:
+        - name: POSTGRES_DB
+          value: "keycloak"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: keycloak-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: keycloak-password
+        volumeMounts:
+        - name: keycloak-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: keycloak-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
+# --- UNLEASH POSTGRES ---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unleash-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: unleash-db
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: unleash-db
+spec:
+  serviceName: "unleash-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unleash-db
+  template:
+    metadata:
+      labels:
+        app: unleash-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        env:
+        - name: POSTGRES_DB
+          value: "unleash"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-password
+        volumeMounts:
+        - name: unleash-pgdata
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: unleash-pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unleash
+spec:
+  ports:
+    - port: 4242
+      targetPort: 4242
+  selector:
+    app: unleash
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unleash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unleash
+  template:
+    metadata:
+      labels:
+        app: unleash
+    spec:
+      containers:
+      - name: unleash
+        image: unleashorg/unleash-server:5
+        ports:
+        - containerPort: 4242
+        env:
+        - name: DATABASE_HOST
+          value: "unleash-db"
+        - name: DATABASE_NAME
+          value: "unleash"
+        - name: DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-password
+        - name: DATABASE_SSL
+          value: "false"
+        - name: INIT_ADMIN_API_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-admin-api-token
+        - name: INIT_CLIENT_API_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: neobank-secrets
+              key: unleash-api-token
+
